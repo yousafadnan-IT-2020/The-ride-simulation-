@@ -1,0 +1,1625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sawari — Dispatch Simulator</title>
+
+<!-- MapLibre GL JS -->
+<link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+
+<!-- React 18 -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+<!-- Inter + JetBrains Mono -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+<style>
+/* ─── RESET & BASE ─── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:        #080B12;
+  --surface:   #0F1420;
+  --elevated:  #161D2E;
+  --border:    rgba(255,255,255,0.07);
+  --amber:     #F97316;
+  --amber-dim: rgba(249,115,22,0.15);
+  --amber-glow:rgba(249,115,22,0.35);
+  --green:     #10B981;
+  --green-dim: rgba(16,185,129,0.15);
+  --red:       #EF4444;
+  --red-dim:   rgba(239,68,68,0.15);
+  --blue:      #3B82F6;
+  --blue-dim:  rgba(59,130,246,0.12);
+  --purple:    #8B5CF6;
+  --muted:     #4B5563;
+  --subtle:    #94A3B8;
+  --text:      #E2E8F0;
+  --white:     #F8FAFC;
+  --font:      'Inter', sans-serif;
+  --mono:      'JetBrains Mono', monospace;
+}
+html, body, #root { height: 100%; overflow: hidden; }
+body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; }
+
+/* ─── SCROLLBAR ─── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
+
+/* ─── LAYOUT ─── */
+#root { display: flex; flex-direction: column; }
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ─── TOPBAR ─── */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 20px;
+  height: 56px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  z-index: 100;
+}
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: 32px;
+}
+.logo-icon {
+  width: 32px; height: 32px;
+  background: var(--amber);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+}
+.logo-text { font-weight: 700; font-size: 18px; letter-spacing: -0.5px; color: var(--white); }
+.logo-sub { font-size: 10px; color: var(--amber); font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; }
+
+.nav-tabs { display: flex; gap: 4px; }
+.nav-tab {
+  padding: 6px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--subtle);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  transition: all 0.15s;
+  display: flex; align-items: center; gap: 6px;
+}
+.nav-tab:hover { color: var(--text); background: var(--elevated); }
+.nav-tab.active { color: var(--amber); background: var(--amber-dim); }
+
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse-green 2s infinite; }
+@keyframes pulse-green { 0%,100%{opacity:1} 50%{opacity:0.5} }
+.status-label { font-size: 12px; color: var(--subtle); }
+.version-badge { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+
+/* ─── STATS BAR ─── */
+.stats-bar {
+  display: flex;
+  padding: 0 20px;
+  height: 52px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow-x: auto;
+  gap: 0;
+}
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px;
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+}
+.stat-item:first-child { padding-left: 0; }
+.stat-icon { font-size: 16px; }
+.stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; }
+.stat-value { font-size: 18px; font-weight: 700; color: var(--white); line-height: 1; }
+.stat-value.amber { color: var(--amber); }
+.stat-value.green { color: var(--green); }
+.stat-value.red { color: var(--red); }
+.stat-change { font-size: 10px; color: var(--green); }
+
+/* ─── MAIN AREA ─── */
+.main-area {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ─── MAP ─── */
+.map-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+#map {
+  width: 100%;
+  height: 100%;
+}
+.map-overlay-controls {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 10;
+}
+.map-hint {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15,20,32,0.9);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 8px 20px;
+  font-size: 12px;
+  color: var(--subtle);
+  pointer-events: none;
+  z-index: 10;
+  display: flex; align-items: center; gap: 6px;
+}
+.map-hint-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--amber); }
+.map-action-btn {
+  background: rgba(15,20,32,0.9);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex; align-items: center; gap: 6px;
+  white-space: nowrap;
+}
+.map-action-btn:hover { border-color: var(--amber); color: var(--amber); }
+.map-action-btn.active { border-color: var(--amber); color: var(--amber); background: var(--amber-dim); }
+
+/* ─── RIGHT PANEL ─── */
+.right-panel {
+  width: 380px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.panel-header {
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.panel-title { font-size: 13px; font-weight: 600; color: var(--white); }
+.panel-subtitle { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.panel-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+/* ─── CARDS ─── */
+.card {
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+}
+.card-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 12px;
+}
+
+/* ─── DRIVER LIST ─── */
+.driver-list-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+  margin-bottom: 6px;
+}
+.driver-list-item:hover { background: rgba(255,255,255,0.04); border-color: var(--border); }
+.driver-list-item.selected { background: var(--amber-dim); border-color: var(--amber); }
+.driver-list-item.highlighted { background: rgba(59,130,246,0.1); border-color: var(--blue); animation: driver-ping 1s ease-in-out infinite; }
+@keyframes driver-ping { 0%,100%{border-color:var(--blue)} 50%{border-color:rgba(59,130,246,0.3)} }
+.driver-list-item.accepted { background: var(--green-dim); border-color: var(--green); }
+
+.driver-avatar {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; flex-shrink: 0;
+  border: 2px solid transparent;
+}
+.driver-avatar.online { border-color: var(--green); }
+.driver-avatar.offline { opacity: 0.5; border-color: var(--muted); }
+
+.driver-info { flex: 1; min-width: 0; }
+.driver-name { font-size: 13px; font-weight: 600; color: var(--white); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.driver-meta { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.driver-badge {
+  font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 6px;
+  display: flex; align-items: center; gap: 4px;
+}
+.badge-online { background: var(--green-dim); color: var(--green); }
+.badge-offline { background: rgba(75,85,99,0.3); color: var(--muted); }
+.badge-busy { background: var(--amber-dim); color: var(--amber); }
+
+/* ─── DRIVER DETAIL PANEL ─── */
+.driver-detail {
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.driver-detail-header {
+  padding: 16px;
+  background: linear-gradient(135deg, rgba(249,115,22,0.1) 0%, transparent 60%);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.driver-detail-avatar {
+  width: 52px; height: 52px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px;
+  border: 2px solid var(--amber);
+  background: var(--amber-dim);
+}
+.driver-detail-name { font-size: 16px; font-weight: 700; color: var(--white); }
+.driver-detail-id { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+.stars { color: var(--amber); font-size: 12px; letter-spacing: 1px; }
+
+.detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.detail-row:last-child { border-bottom: none; }
+.detail-key { font-size: 12px; color: var(--muted); }
+.detail-val { font-size: 12px; color: var(--white); font-weight: 500; }
+.detail-val.green { color: var(--green); }
+.detail-val.amber { color: var(--amber); }
+
+.response-time-select {
+  display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;
+}
+.rt-chip {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--subtle);
+  transition: all 0.12s;
+  font-family: var(--mono);
+}
+.rt-chip:hover { border-color: var(--amber); color: var(--amber); }
+.rt-chip.active { background: var(--amber); color: #000; border-color: var(--amber); }
+
+.btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s;
+  display: flex; align-items: center; gap: 6px;
+}
+.btn-primary { background: var(--amber); color: #000; }
+.btn-primary:hover { background: #FB923C; }
+.btn-danger { background: var(--red-dim); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }
+.btn-danger:hover { background: rgba(239,68,68,0.25); }
+.btn-ghost { background: var(--elevated); color: var(--text); border: 1px solid var(--border); }
+.btn-ghost:hover { border-color: var(--amber); color: var(--amber); }
+.btn-green { background: var(--green-dim); color: var(--green); border: 1px solid rgba(16,185,129,0.2); }
+.btn-green:hover { background: rgba(16,185,129,0.25); }
+.btn-sm { padding: 5px 10px; font-size: 11px; }
+.btn-full { width: 100%; justify-content: center; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-group { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ─── RIDE FORM ─── */
+.ride-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.02);
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.ride-step.active { border-color: var(--amber); background: var(--amber-dim); }
+.ride-step.done { border-color: var(--green); background: var(--green-dim); }
+.step-num {
+  width: 24px; height: 24px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700;
+  background: var(--muted); color: var(--bg);
+  flex-shrink: 0;
+}
+.ride-step.active .step-num { background: var(--amber); }
+.ride-step.done .step-num { background: var(--green); }
+.step-label { font-size: 12px; color: var(--subtle); }
+.step-val { font-size: 11px; color: var(--white); font-family: var(--mono); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ─── FARE CARD ─── */
+.fare-display {
+  text-align: center;
+  padding: 16px;
+}
+.fare-amount { font-size: 32px; font-weight: 800; color: var(--amber); letter-spacing: -1px; }
+.fare-currency { font-size: 16px; color: var(--muted); }
+.fare-breakdown { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+.fare-line { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+.fare-line.total { color: var(--white); font-weight: 600; border-top: 1px solid var(--border); padding-top: 6px; margin-top: 2px; }
+.surge-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 600;
+  background: var(--red-dim); color: var(--red);
+  margin-top: 8px;
+}
+
+/* ─── DISPATCH TIMELINE ─── */
+.timeline { display: flex; flex-direction: column; gap: 0; }
+.timeline-event {
+  display: flex;
+  gap: 12px;
+  position: relative;
+  padding-bottom: 16px;
+  animation: slide-in 0.3s ease;
+}
+@keyframes slide-in { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:none} }
+.timeline-event:last-child { padding-bottom: 0; }
+.timeline-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--amber);
+  flex-shrink: 0;
+  margin-top: 4px;
+  position: relative;
+}
+.timeline-dot::after {
+  content: '';
+  position: absolute;
+  left: 4px; top: 10px;
+  width: 2px;
+  height: calc(100% + 6px);
+  background: var(--border);
+}
+.timeline-event:last-child .timeline-dot::after { display: none; }
+.timeline-dot.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.timeline-dot.red { background: var(--red); }
+.timeline-dot.blue { background: var(--blue); }
+.timeline-dot.amber { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+.tl-content { flex: 1; }
+.tl-time { font-size: 10px; color: var(--muted); font-family: var(--mono); }
+.tl-label { font-size: 12px; color: var(--text); font-weight: 500; }
+.tl-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* ─── DRIVER DISPATCH CARDS ─── */
+.dispatch-driver-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.02);
+  margin-bottom: 6px;
+  transition: all 0.3s;
+}
+.dispatch-driver-card.searching { border-color: var(--blue); animation: glow-blue 1.5s ease-in-out infinite; }
+.dispatch-driver-card.accepted { border-color: var(--green); background: var(--green-dim); }
+.dispatch-driver-card.rejected { border-color: var(--muted); opacity: 0.5; }
+.dispatch-driver-card.broadcast { border-color: var(--amber); background: var(--amber-dim); animation: glow-amber 1.5s ease-in-out infinite; }
+@keyframes glow-blue { 0%,100%{box-shadow:0 0 0px rgba(59,130,246,0)} 50%{box-shadow:0 0 12px rgba(59,130,246,0.3)} }
+@keyframes glow-amber { 0%,100%{box-shadow:0 0 0px rgba(249,115,22,0)} 50%{box-shadow:0 0 12px rgba(249,115,22,0.3)} }
+.dispatch-countdown {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--amber);
+  min-width: 30px;
+  text-align: right;
+}
+.dispatch-status {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+.ds-waiting { background: rgba(59,130,246,0.15); color: var(--blue); }
+.ds-accepted { background: var(--green-dim); color: var(--green); }
+.ds-rejected { background: rgba(75,85,99,0.3); color: var(--muted); }
+.ds-broadcast { background: var(--amber-dim); color: var(--amber); }
+
+/* ─── RIDE STATUS BANNER ─── */
+.ride-status-banner {
+  padding: 10px 14px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.rsb-idle { background: rgba(75,85,99,0.2); border: 1px solid var(--muted); }
+.rsb-searching { background: rgba(59,130,246,0.1); border: 1px solid var(--blue); }
+.rsb-assigned { background: var(--green-dim); border: 1px solid rgba(16,185,129,0.3); }
+.rsb-broadcast { background: var(--amber-dim); border: 1px solid rgba(249,115,22,0.3); }
+.rsb-icon { font-size: 18px; }
+.rsb-label { font-size: 13px; font-weight: 600; color: var(--white); }
+.rsb-sub { font-size: 11px; color: var(--muted); }
+
+/* ─── PROGRESS BAR ─── */
+.progress-bar { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 4px; }
+.progress-fill { height: 100%; background: var(--amber); border-radius: 2px; transition: width 1s linear; }
+.progress-fill.green { background: var(--green); }
+
+/* ─── EMPTY STATE ─── */
+.empty-state { text-align: center; padding: 32px 16px; color: var(--muted); }
+.empty-state-icon { font-size: 32px; margin-bottom: 10px; opacity: 0.5; }
+.empty-state p { font-size: 13px; line-height: 1.6; }
+
+/* ─── TOAST ─── */
+.toast-container {
+  position: fixed; top: 70px; right: 20px; z-index: 9999;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.toast {
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px;
+  min-width: 280px;
+  max-width: 360px;
+  display: flex; align-items: center; gap: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  animation: toast-in 0.25s ease;
+}
+@keyframes toast-in { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:none} }
+.toast.success { border-color: rgba(16,185,129,0.3); }
+.toast.error { border-color: rgba(239,68,68,0.3); }
+.toast.info { border-color: rgba(59,130,246,0.3); }
+.toast-icon { font-size: 18px; flex-shrink: 0; }
+.toast-msg { font-size: 12px; color: var(--text); line-height: 1.4; }
+.toast-title { font-weight: 600; color: var(--white); }
+
+/* ─── RIDE ID ─── */
+.ride-id { font-family: var(--mono); font-size: 11px; color: var(--amber); }
+
+/* ─── SEPARATOR ─── */
+.sep { height: 1px; background: var(--border); margin: 4px 0; }
+
+/* ─── MAPLIBRE OVERRIDES ─── */
+.maplibregl-popup-content {
+  background: var(--elevated) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  color: var(--text) !important;
+  font-family: var(--font) !important;
+  font-size: 12px !important;
+  padding: 10px 14px !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
+}
+.maplibregl-popup-tip { display: none !important; }
+.maplibregl-ctrl-group { background: var(--elevated) !important; border: 1px solid var(--border) !important; border-radius: 8px !important; }
+.maplibregl-ctrl-group button { background: transparent !important; }
+.maplibregl-ctrl-group button span { filter: invert(1) brightness(0.7) !important; }
+
+/* ─── SECTION LABEL ─── */
+.section-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-label::after { content:''; flex:1; height:1px; background:var(--border); }
+
+/* ─── SPINNING LOADER ─── */
+.spin { animation: spin 1s linear infinite; display:inline-block; }
+@keyframes spin { to{transform:rotate(360deg)} }
+
+/* ─── NUMBER ANIMATION ─── */
+.num-anim { transition: all 0.4s; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+const { useState, useEffect, useRef, useCallback } = React;
+const h = React.createElement;
+
+// ═══════════════════════════════════════════════
+// CONSTANTS & HELPERS
+// ═══════════════════════════════════════════════
+
+const ISLAMABAD_CENTER = [73.0479, 33.6844];
+const DRIVER_NAMES = ['Ahmed Khan','Bilal Raza','Usman Ali','Faisal Malik','Tariq Shah','Imran Hussain','Zubair Akhtar','Nadeem Qureshi','Waseem Baig','Kamran Javed','Saeed Anwar','Hassan Mirza','Rizwan Chaudhry','Asad Butt','Hamid Ullah','Shahid Mehmood','Naveed Iqbal','Danish Siddiqui','Arif Nawaz','Jawad Cheema'];
+const VEHICLE_TYPES = ['🚗 Economy','🚙 Comfort','🚐 XL','🏍️ Bike','⚡ Electric'];
+const AVATARS = ['🧔','👨','🧑','👱','🧓','👲','🧔‍♂️','👦','🧑‍🦱','🧑‍🦳'];
+const RT_OPTIONS = [3,5,8,10,15];
+
+let driverIdCounter = 1;
+let rideIdCounter = 1;
+let toastIdCounter = 1;
+
+function uid(prefix='') { return prefix + Math.random().toString(36).slice(2,8).toUpperCase(); }
+function randBetween(a,b) { return Math.random()*(b-a)+a; }
+function randInt(a,b) { return Math.floor(randBetween(a,b+1)); }
+function randItem(arr) { return arr[Math.floor(Math.random()*arr.length)]; }
+
+function haversineKm([lng1,lat1],[lng2,lat2]) {
+  const R=6371, dLat=(lat2-lat1)*Math.PI/180, dLng=(lng2-lng1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function createDriver(lngLat) {
+  return {
+    id: 'd_' + (driverIdCounter++),
+    name: randItem(DRIVER_NAMES),
+    avatar: randItem(AVATARS),
+    vehicle: randItem(VEHICLE_TYPES),
+    rating: parseFloat((randBetween(3.8,5.0)).toFixed(1)),
+    online: Math.random() > 0.25,
+    coords: lngLat ? [...lngLat] : [
+      ISLAMABAD_CENTER[0] + randBetween(-0.12,0.12),
+      ISLAMABAD_CENTER[1] + randBetween(-0.10,0.10)
+    ],
+    acceptProb: parseFloat((randBetween(0.5,0.97)).toFixed(2)),
+    responseTime: randItem([5,6,7,8,10]),
+    trips: randInt(12,890),
+    phone: '+92 3' + randInt(00,99).toString().padStart(2,'0') + ' ' + randInt(1000000,9999999),
+  };
+}
+
+// Fare calculation (no time-based pricing)
+function calcFare(distKm, surgeMultiplier) {
+  const BASE = 80; // PKR
+  const RATE = 45; // PKR per km
+  const LOCAL = 15; // PKR fixed local fee
+  const dist = BASE + distKm * RATE;
+  const fare = dist * surgeMultiplier + LOCAL;
+  return {
+    base: BASE,
+    distanceCharge: parseFloat((distKm * RATE).toFixed(0)),
+    localFee: LOCAL,
+    surge: surgeMultiplier,
+    total: parseFloat(fare.toFixed(0)),
+    distKm: parseFloat(distKm.toFixed(2))
+  };
+}
+
+function getSurgeMultiplier(onlineCount, rideCount) {
+  const ratio = rideCount / Math.max(onlineCount, 1);
+  if (ratio < 0.3) return 1.0;
+  if (ratio < 0.6) return 1.2;
+  if (ratio < 1.0) return 1.5;
+  return 2.0;
+}
+
+function surgeLabel(m) {
+  if (m <= 1.0) return 'Normal';
+  if (m <= 1.2) return 'Busy';
+  if (m <= 1.5) return 'High Demand';
+  return 'Very Busy';
+}
+
+// Decode a simple straight-line route (we simulate as curved path)
+function buildRoutePath(from, to, steps=40) {
+  const pts = [];
+  for (let i=0;i<=steps;i++) {
+    const t = i/steps;
+    // Add a slight arc for visual interest
+    const mid = [(from[0]+to[0])/2, (from[1]+to[1])/2];
+    const offset = 0.01 * Math.sin(t * Math.PI);
+    const lng = from[0]+(to[0]-from[0])*t + offset * (to[1]-from[1]);
+    const lat = from[1]+(to[1]-from[1])*t + offset * (from[0]-to[0]);
+    pts.push([lng,lat]);
+  }
+  return pts;
+}
+
+// ═══════════════════════════════════════════════
+// SVG MARKERS
+// ═══════════════════════════════════════════════
+
+function carSVG(color='#F97316', online=true, selected=false) {
+  const glow = selected ? `<circle cx="16" cy="16" r="15" fill="${color}" opacity="0.2"/>` : '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+    ${glow}
+    <circle cx="16" cy="16" r="${selected?13:11}" fill="${online?color:'#4B5563'}" opacity="${online?1:0.6}"/>
+    <text x="16" y="21" text-anchor="middle" font-size="13">🚗</text>
+    ${online?`<circle cx="24" cy="8" r="4" fill="#10B981" stroke="#080B12" stroke-width="1.5"/>`:''}
+  </svg>`;
+}
+
+function bikeSVG(color='#8B5CF6', online=true) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="11" fill="${online?color:'#4B5563'}" opacity="${online?1:0.6}"/>
+    <text x="16" y="21" text-anchor="middle" font-size="13">🏍️</text>
+    ${online?`<circle cx="24" cy="8" r="4" fill="#10B981" stroke="#080B12" stroke-width="1.5"/>`:''}
+  </svg>`;
+}
+
+function pickupSVG() {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="44" viewBox="0 0 36 44">
+    <filter id="glow"><feGaussianBlur stdDeviation="2" result="blur"/><feComposite in="SourceGraphic" in2="blur" operator="over"/></filter>
+    <ellipse cx="18" cy="40" rx="6" ry="3" fill="rgba(16,185,129,0.3)"/>
+    <path d="M18 2 C10 2 4 8 4 16 C4 26 18 40 18 40 C18 40 32 26 32 16 C32 8 26 2 18 2Z" fill="#10B981" filter="url(#glow)"/>
+    <circle cx="18" cy="16" r="6" fill="white"/>
+    <text x="18" y="20" text-anchor="middle" font-size="10" fill="#10B981" font-weight="bold">P</text>
+  </svg>`;
+}
+
+function destSVG() {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="44" viewBox="0 0 36 44">
+    <filter id="glow2"><feGaussianBlur stdDeviation="2" result="blur"/><feComposite in="SourceGraphic" in2="blur" operator="over"/></filter>
+    <ellipse cx="18" cy="40" rx="6" ry="3" fill="rgba(239,68,68,0.3)"/>
+    <path d="M18 2 C10 2 4 8 4 16 C4 26 18 40 18 40 C18 40 32 26 32 16 C32 8 26 2 18 2Z" fill="#EF4444" filter="url(#glow2)"/>
+    <circle cx="18" cy="16" r="6" fill="white"/>
+    <text x="18" y="20" text-anchor="middle" font-size="10" fill="#EF4444" font-weight="bold">D</text>
+  </svg>`;
+}
+
+function markerForDriver(d, selected=false) {
+  if (d.vehicle.includes('Bike')) return bikeSVG('#8B5CF6', d.online);
+  if (d.vehicle.includes('Electric')) return carSVG('#3B82F6', d.online, selected);
+  if (d.vehicle.includes('Comfort')) return carSVG('#F97316', d.online, selected);
+  if (d.vehicle.includes('XL')) return carSVG('#10B981', d.online, selected);
+  return carSVG('#94A3B8', d.online, selected);
+}
+
+// ═══════════════════════════════════════════════
+// TOAST COMPONENT
+// ═══════════════════════════════════════════════
+
+function ToastContainer({ toasts, dismiss }) {
+  return h('div', { className:'toast-container' },
+    toasts.map(t => h('div', { key:t.id, className:`toast ${t.type||''}`,
+      onClick: ()=>dismiss(t.id) },
+      h('div', { className:'toast-icon' }, t.icon||'ℹ️'),
+      h('div', {}, h('div',{className:'toast-title'},t.title), h('div',{className:'toast-msg'},t.msg))
+    ))
+  );
+}
+
+// ═══════════════════════════════════════════════
+// STARS
+// ═══════════════════════════════════════════════
+
+function Stars({ rating }) {
+  const full = Math.floor(rating);
+  const half = rating % 1 >= 0.5;
+  return h('span', { className:'stars' },
+    '★'.repeat(full) + (half?'½':'') + '☆'.repeat(5-full-(half?1:0)) + ` ${rating}`
+  );
+}
+
+// ═══════════════════════════════════════════════
+// DRIVER DETAIL PANEL
+// ═══════════════════════════════════════════════
+
+function DriverDetailPanel({ driver, onClose, onUpdate, onDelete, onToggle, rideCoords }) {
+  const [rt, setRt] = useState(driver.responseTime);
+
+  useEffect(() => { setRt(driver.responseTime); }, [driver.id]);
+
+  const distKm = rideCoords ? haversineKm(driver.coords, rideCoords) : null;
+
+  function saveRT(v) {
+    setRt(v);
+    onUpdate({ ...driver, responseTime: v });
+  }
+
+  return h('div', { className:'driver-detail' },
+    h('div', { className:'driver-detail-header' },
+      h('div', { className:'driver-detail-avatar' }, driver.avatar),
+      h('div', {},
+        h('div', { className:'driver-detail-name' }, driver.name),
+        h('div', { className:'ride-id' }, driver.id),
+        h(Stars, { rating: driver.rating })
+      ),
+      h('button', { className:'btn btn-ghost btn-sm', style:{marginLeft:'auto'}, onClick:onClose }, '✕')
+    ),
+    h('div', { className:'detail-row' }, h('span',{className:'detail-key'},'Vehicle'), h('span',{className:'detail-val'},driver.vehicle)),
+    h('div', { className:'detail-row' },
+      h('span',{className:'detail-key'},'Status'),
+      h('span',{className:`detail-val ${driver.online?'green':''}`}, driver.online?'🟢 Online':'⭕ Offline')
+    ),
+    h('div', { className:'detail-row' }, h('span',{className:'detail-key'},'Accept Prob'), h('span',{className:'detail-val amber'},(driver.acceptProb*100).toFixed(0)+'%')),
+    h('div', { className:'detail-row' }, h('span',{className:'detail-key'},'Trips'), h('span',{className:'detail-val'},driver.trips)),
+    h('div', { className:'detail-row' }, h('span',{className:'detail-key'},'Phone'), h('span',{className:'detail-val'},driver.phone)),
+    distKm !== null && h('div', { className:'detail-row' }, h('span',{className:'detail-key'},'From Pickup'), h('span',{className:'detail-val amber'},distKm.toFixed(2)+' km')),
+
+    h('div', { style:{padding:'12px 16px', borderBottom:'1px solid var(--border)'} },
+      h('div', { className:'detail-key', style:{marginBottom:'8px'} }, 'Response Time'),
+      h('div', { className:'response-time-select' },
+        RT_OPTIONS.map(v => h('button', { key:v, className:`rt-chip ${rt===v?'active':''}`, onClick:()=>saveRT(v) }, v+'s'))
+      )
+    ),
+    h('div', { style:{padding:'12px 16px', display:'flex', gap:'8px'} },
+      h('button', { className:'btn btn-green', onClick:()=>onToggle(driver) },
+        driver.online ? '⭕ Set Offline' : '🟢 Set Online'
+      ),
+      h('button', { className:'btn btn-danger', onClick:()=>{ onDelete(driver.id); onClose(); } }, '🗑️ Remove')
+    )
+  );
+}
+
+// ═══════════════════════════════════════════════
+// DISPATCH ENGINE
+// ═══════════════════════════════════════════════
+
+/*
+ * DISPATCH ALGORITHM:
+ * 1. Find up to 4 nearest online drivers sorted by haversine distance
+ * 2. Highlight them on map and start individual countdown timers
+ * 3. When a driver's timer fires, probabilistically determine accept/reject
+ * 4. First accept → assign ride, notify others "Already Assigned"
+ * 5. If all 4 reject → broadcast to ALL remaining online drivers
+ * 6. Repeat broadcast until acceptance or no drivers left
+ */
+
+function useDispatchEngine({ drivers, pickup, dest, onEvent, onAssign, addToast }) {
+  const activeTimers = useRef([]);
+  const dispatchState = useRef(null);
+
+  function clearAllTimers() {
+    activeTimers.current.forEach(clearTimeout);
+    activeTimers.current = [];
+  }
+
+  function startDispatch(rideId, surge) {
+    clearAllTimers();
+
+    if (!pickup || !dest) return;
+    const online = drivers.filter(d => d.online);
+    if (online.length === 0) {
+      onEvent({ type:'error', label:'No Online Drivers', sub:'Cannot start dispatch — no drivers available', dot:'red' });
+      return;
+    }
+
+    const sorted = [...online].sort((a,b)=>haversineKm(a.coords,pickup)-haversineKm(b.coords,pickup));
+
+    onEvent({ type:'created', label:'Ride Created', sub:`ID: ${rideId}`, dot:'amber' });
+    onEvent({ type:'searching', label:'Searching Nearby Drivers', sub:`${online.length} online drivers in area`, dot:'blue' });
+
+    dispatchState.current = { rideId, surge, assigned: false, broadcastRound: 0 };
+    sendToNearest(sorted, 4, rideId);
+  }
+
+  function sendToNearest(candidates, count, rideId) {
+    const batch = candidates.slice(0,count);
+    if (batch.length === 0) {
+      onEvent({ type:'fail', label:'No Drivers Available', sub:'All drivers rejected or offline', dot:'red' });
+      addToast({ type:'error', icon:'❌', title:'Dispatch Failed', msg:'No drivers accepted the ride' });
+      onAssign(null, rideId);
+      return;
+    }
+
+    onEvent({ type:'notify', label:`${batch.length} Drivers Notified`, sub: batch.map(d=>d.name.split(' ')[0]).join(', '), dot:'blue' });
+
+    const state = dispatchState.current;
+    let responded = 0;
+    let assignedInBatch = false;
+
+    batch.forEach((driver) => {
+      const delay = driver.responseTime * 1000;
+      const t = setTimeout(() => {
+        if (state.assigned) {
+          // Another driver already accepted
+          onEvent({ type:'locked', label:`${driver.name.split(' ')[0]} — Already Assigned`, sub:'Notification dismissed', dot:'red' });
+          onAssign('already', driver.id, rideId);
+          return;
+        }
+        const accepts = Math.random() < driver.acceptProb;
+        responded++;
+
+        if (accepts && !assignedInBatch) {
+          assignedInBatch = true;
+          state.assigned = true;
+          onEvent({ type:'accept', label:`${driver.name} Accepted!`, sub:`${driver.vehicle} · Rating ${driver.rating}`, dot:'green' });
+          onEvent({ type:'assign', label:'Ride Assigned', sub:`Driver en route from ${haversineKm(driver.coords,pickup).toFixed(1)} km`, dot:'green' });
+          onAssign(driver, rideId);
+          addToast({ type:'success', icon:'✅', title:'Ride Assigned!', msg:`${driver.name} accepted your ride` });
+        } else if (!accepts) {
+          onEvent({ type:'reject', label:`${driver.name.split(' ')[0]} Declined`, sub:'Looking for next driver...', dot:'red' });
+
+          if (responded >= batch.length && !state.assigned) {
+            // All in this batch rejected — broadcast
+            state.broadcastRound++;
+            const remaining = candidates.slice(count).filter(d=>d.online);
+            if (remaining.length === 0 && state.broadcastRound === 1) {
+              // Try all online drivers
+              const allOnline = drivers.filter(d=>d.online && !batch.find(b=>b.id===d.id));
+              if (allOnline.length > 0) {
+                onEvent({ type:'broadcast', label:'Broadcasting to All Drivers', sub:`Sending to ${allOnline.length} available drivers`, dot:'amber' });
+                addToast({ type:'info', icon:'📡', title:'Broadcast Mode', msg:`Notifying ${allOnline.length} remaining drivers` });
+                sendToNearest(allOnline, allOnline.length, rideId);
+              } else {
+                onEvent({ type:'fail', label:'No Drivers Available', sub:'All drivers rejected', dot:'red' });
+                onAssign(null, rideId);
+              }
+            } else if (remaining.length > 0) {
+              onEvent({ type:'broadcast', label:'Expanding Search', sub:`Trying ${Math.min(4,remaining.length)} more drivers`, dot:'amber' });
+              sendToNearest(remaining, 4, rideId);
+            } else {
+              onEvent({ type:'fail', label:'No Drivers Available', sub:'All drivers rejected', dot:'red' });
+              onAssign(null, rideId);
+            }
+          }
+        }
+      }, delay);
+      activeTimers.current.push(t);
+    });
+  }
+
+  function cancel() {
+    clearAllTimers();
+    if (dispatchState.current) dispatchState.current.assigned = true;
+  }
+
+  return { startDispatch, cancel };
+}
+
+// ═══════════════════════════════════════════════
+// DRIVER MANAGEMENT PAGE
+// ═══════════════════════════════════════════════
+
+function DriverManagementPage({ drivers, setDrivers, selectedDriver, setSelectedDriver, map, dispatch, dispatchedDriverIds, ridePickup }) {
+  const [genCount] = useState(null);
+
+  function addDriverAt(coords) {
+    const d = createDriver(coords);
+    setDrivers(prev => [...prev, d]);
+  }
+
+  function removeDriver(id) {
+    setDrivers(prev => prev.filter(d=>d.id!==id));
+    if (selectedDriver?.id === id) setSelectedDriver(null);
+  }
+
+  function updateDriver(updated) {
+    setDrivers(prev => prev.map(d=>d.id===updated.id?updated:d));
+    if (selectedDriver?.id===updated.id) setSelectedDriver(updated);
+  }
+
+  function toggleDriver(driver) {
+    updateDriver({...driver, online:!driver.online});
+  }
+
+  function randomizePositions() {
+    setDrivers(prev => prev.map(d=>({
+      ...d,
+      coords:[ISLAMABAD_CENTER[0]+randBetween(-0.12,0.12), ISLAMABAD_CENTER[1]+randBetween(-0.10,0.10)]
+    })));
+  }
+
+  function generateN(n) {
+    const batch = Array.from({length:n},()=>createDriver(null));
+    setDrivers(prev=>[...prev,...batch]);
+  }
+
+  function clearAll() { setDrivers([]); setSelectedDriver(null); }
+
+  const online = drivers.filter(d=>d.online).length;
+  const offline = drivers.length - online;
+
+  return h('div', { style:{display:'flex', flexDirection:'column', height:'100%', overflow:'hidden'} },
+    h('div', { className:'panel-header' },
+      h('div', { className:'panel-title' }, '🚗 Driver Management'),
+      h('div', { className:'panel-subtitle' }, `${drivers.length} drivers · ${online} online · ${offline} offline`)
+    ),
+    h('div', { className:'panel-body' },
+
+      // Quick actions
+      h('div', { className:'card' },
+        h('div', { className:'card-title' }, 'Generate Drivers'),
+        h('div', { className:'btn-group' },
+          h('button', { className:'btn btn-ghost btn-sm', onClick:()=>generateN(10) }, '+10'),
+          h('button', { className:'btn btn-ghost btn-sm', onClick:()=>generateN(20) }, '+20'),
+          h('button', { className:'btn btn-ghost btn-sm', onClick:()=>generateN(50) }, '+50'),
+        ),
+        h('div', { className:'sep', style:{margin:'10px 0'} }),
+        h('div', { className:'btn-group' },
+          h('button', { className:'btn btn-ghost btn-sm', onClick:randomizePositions }, '🎲 Randomize'),
+          h('button', { className:'btn btn-danger btn-sm', onClick:clearAll }, '🗑️ Clear All'),
+        ),
+        h('div', { style:{marginTop:10, fontSize:11, color:'var(--muted)'} },
+          '💡 Click anywhere on the map to place a driver'
+        )
+      ),
+
+      // Selected driver detail
+      selectedDriver && h(DriverDetailPanel, {
+        driver: selectedDriver,
+        onClose: ()=>setSelectedDriver(null),
+        onUpdate: updateDriver,
+        onDelete: removeDriver,
+        onToggle: toggleDriver,
+        rideCoords: ridePickup
+      }),
+
+      // Driver list
+      h('div', { className:'card' },
+        h('div', { className:'card-title' }, `All Drivers (${drivers.length})`),
+        drivers.length === 0
+          ? h('div', { className:'empty-state' },
+              h('div', { className:'empty-state-icon' }, '🗺️'),
+              h('p', {}, 'No drivers yet. Click on the map or use Generate buttons above.')
+            )
+          : drivers.map(d => {
+              const isDispatched = dispatchedDriverIds.includes(d.id);
+              return h('div', {
+                key: d.id,
+                className: `driver-list-item ${selectedDriver?.id===d.id?'selected':''} ${isDispatched?'highlighted':''}`,
+                onClick: ()=>setSelectedDriver(selectedDriver?.id===d.id?null:d)
+              },
+                h('div', { className:`driver-avatar ${d.online?'online':'offline'}` }, d.avatar),
+                h('div', { className:'driver-info' },
+                  h('div', { className:'driver-name' }, d.name),
+                  h('div', { className:'driver-meta' }, d.vehicle + ' · ⭐ ' + d.rating)
+                ),
+                h('div', { className:`driver-badge ${d.online?'badge-online':'badge-offline'}` },
+                  d.online ? '● Online' : '○ Offline'
+                )
+              );
+            })
+      )
+    )
+  );
+}
+
+// ═══════════════════════════════════════════════
+// RIDE SIMULATOR PAGE
+// ═══════════════════════════════════════════════
+
+function RideSimulatorPage({ drivers, setDrivers, pickup, setPickup, dest, setDest, mapClickMode, setMapClickMode, addToast, stats, setStats }) {
+  const [dispatchEvents, setDispatchEvents] = useState([]);
+  const [assignedDriver, setAssignedDriver] = useState(null);
+  const [rideStatus, setRideStatus] = useState('idle'); // idle | searching | assigned | failed | broadcast
+  const [rideId, setRideId] = useState(null);
+  const [dispatchDrivers, setDispatchDrivers] = useState([]); // drivers being notified
+  const [dispatchCountdowns, setDispatchCountdowns] = useState({});
+  const countdownRefs = useRef({});
+
+  const online = drivers.filter(d=>d.online);
+  const surge = getSurgeMultiplier(online.length, stats.totalRequests);
+  const dist = pickup && dest ? haversineKm(pickup, dest) : null;
+  const fare = dist ? calcFare(dist, surge) : null;
+
+  function addEvent(evt) {
+    setDispatchEvents(prev => [{...evt, ts: new Date().toLocaleTimeString()}, ...prev].slice(0,30));
+  }
+
+  function handleAssign(driver, rid) {
+    clearAllCountdowns();
+    if (!driver || driver === null) {
+      setRideStatus('failed');
+      return;
+    }
+    if (driver === 'already') return; // just an info event
+    setAssignedDriver(driver);
+    setRideStatus('assigned');
+    setDispatchDrivers([]);
+    setStats(s=>({...s, completed: s.completed+1}));
+  }
+
+  function clearAllCountdowns() {
+    Object.values(countdownRefs.current).forEach(clearTimeout);
+    countdownRefs.current = {};
+    setDispatchCountdowns({});
+    setDispatchDrivers([]);
+  }
+
+  const engine = useDispatchEngine({
+    drivers,
+    pickup,
+    dest,
+    onEvent: addEvent,
+    onAssign: handleAssign,
+    addToast
+  });
+
+  function startRide() {
+    if (!pickup || !dest) {
+      addToast({ type:'error', icon:'⚠️', title:'Set Route First', msg:'Please select a pickup and destination on the map' });
+      return;
+    }
+    const rid = 'SWR-' + uid();
+    setRideId(rid);
+    setRideStatus('searching');
+    setAssignedDriver(null);
+    setDispatchEvents([]);
+    setStats(s=>({...s, totalRequests: s.totalRequests+1}));
+
+    // Prepare visual driver cards
+    const online = drivers.filter(d=>d.online);
+    const sorted = [...online].sort((a,b)=>haversineKm(a.coords,pickup)-haversineKm(b.coords,pickup));
+    const batch = sorted.slice(0,4);
+    setDispatchDrivers(batch);
+
+    // Start countdowns for visual display
+    batch.forEach(d => {
+      let time = d.responseTime;
+      setDispatchCountdowns(prev=>({...prev, [d.id]:time}));
+      const iv = setInterval(()=>{
+        time--;
+        setDispatchCountdowns(prev=>({...prev,[d.id]:Math.max(0,time)}));
+        if(time<=0) clearInterval(iv);
+      }, 1000);
+      countdownRefs.current[d.id] = iv;
+    });
+
+    engine.startDispatch(rid, surge);
+  }
+
+  function resetRide() {
+    engine.cancel();
+    setRideStatus('idle');
+    setRideId(null);
+    setAssignedDriver(null);
+    setDispatchEvents([]);
+    setPickup(null);
+    setDest(null);
+    setMapClickMode(null);
+    clearAllCountdowns();
+  }
+
+  const statusConfig = {
+    idle: { cls:'rsb-idle', icon:'🗺️', label:'No Active Ride', sub:'Select pickup and destination to begin' },
+    searching: { cls:'rsb-searching', icon:'🔍', label:'Searching for Drivers', sub:'Notifying nearby drivers...', spin:true },
+    assigned: { cls:'rsb-assigned', icon:'✅', label:'Ride Assigned', sub:`Driver: ${assignedDriver?.name||''}` },
+    failed: { cls:'rsb-idle', icon:'❌', label:'No Driver Found', sub:'All drivers declined or unavailable' },
+    broadcast: { cls:'rsb-broadcast', icon:'📡', label:'Broadcast Mode', sub:'Expanding search...' },
+  };
+  const sc = statusConfig[rideStatus]||statusConfig.idle;
+
+  return h('div', { style:{display:'flex', flexDirection:'column', height:'100%', overflow:'hidden'} },
+    h('div', { className:'panel-header' },
+      h('div', { className:'panel-title' }, '🛣️ Ride Simulator'),
+      h('div', { className:'panel-subtitle' }, rideId ? h('span', { className:'ride-id' }, rideId) : 'Create a new ride request')
+    ),
+    h('div', { className:'panel-body' },
+
+      // Status banner
+      h('div', { className:`ride-status-banner ${sc.cls}` },
+        h('div', { className:'rsb-icon' }, h('span', { className: sc.spin?'spin':'' }, sc.icon)),
+        h('div', {},
+          h('div', { className:'rsb-label' }, sc.label),
+          h('div', { className:'rsb-sub' }, sc.sub)
+        )
+      ),
+
+      // Route selection
+      h('div', { className:'card' },
+        h('div', { className:'card-title' }, 'Route'),
+
+        h('div', {
+          className:`ride-step ${mapClickMode==='pickup'?'active':''} ${pickup?'done':''}`,
+          onClick: ()=>setMapClickMode(mapClickMode==='pickup'?null:'pickup')
+        },
+          h('div',{className:'step-num'},'1'),
+          h('div',{style:{flex:1, minWidth:0}},
+            h('div',{className:'step-label'},'Pickup Location'),
+            pickup && h('div',{className:'step-val'},pickup[0].toFixed(4)+', '+pickup[1].toFixed(4))
+          ),
+          h('span',{style:{fontSize:12,color:'var(--muted)'}}, pickup?'✓':'Click map →')
+        ),
+
+        h('div', {
+          className:`ride-step ${mapClickMode==='dest'?'active':''} ${dest?'done':''}`,
+          onClick: ()=>pickup && setMapClickMode(mapClickMode==='dest'?null:'dest')
+        },
+          h('div',{className:'step-num'},'2'),
+          h('div',{style:{flex:1, minWidth:0}},
+            h('div',{className:'step-label'},'Destination'),
+            dest && h('div',{className:'step-val'},dest[0].toFixed(4)+', '+dest[1].toFixed(4))
+          ),
+          h('span',{style:{fontSize:12,color:'var(--muted)'}}, !pickup?'Set pickup first':dest?'✓':'Click map →')
+        ),
+
+        h('div', { style:{display:'flex', gap:8, marginTop:10} },
+          h('button', {
+            className: 'btn btn-primary btn-full',
+            onClick: startRide,
+            disabled: !pickup || !dest || rideStatus==='searching'
+          }, rideStatus==='searching' ? h('span',{},'⟳ Dispatching...') : '🚀 Request Ride'),
+          (rideStatus !== 'idle') && h('button', { className:'btn btn-ghost', onClick:resetRide }, '↺')
+        )
+      ),
+
+      // Fare
+      fare && h('div', { className:'card' },
+        h('div', { className:'card-title' }, 'Fare Estimate'),
+        h('div', { className:'fare-display' },
+          h('div', { className:'fare-amount' }, 'Rs. ' + fare.total),
+          h('div', { className:'surge-chip' }, `⚡ ${fare.surge}x ${surgeLabel(fare.surge)} Surge`),
+          h('div', { className:'fare-breakdown' },
+            h('div',{className:'fare-line'}, h('span',{},'Base fare'), h('span',{},'Rs. '+fare.base)),
+            h('div',{className:'fare-line'}, h('span',{},'Distance ('+fare.distKm+' km)'), h('span',{},'Rs. '+fare.distanceCharge)),
+            h('div',{className:'fare-line'}, h('span',{},'Surge ('+fare.surge+'x)'), h('span',{style:{color:'var(--red)'}},'+'+Math.round((fare.surge-1)*100)+'%')),
+            h('div',{className:'fare-line'}, h('span',{},'Local fees'), h('span',{},'Rs. '+fare.localFee)),
+            h('div',{className:'fare-line total'}, h('span',{},'Total'), h('span',{},'Rs. '+fare.total)),
+          )
+        )
+      ),
+
+      // Active dispatch drivers
+      dispatchDrivers.length > 0 && rideStatus === 'searching' && h('div', { className:'card' },
+        h('div', { className:'card-title' }, 'Notified Drivers'),
+        dispatchDrivers.map(d => {
+          const cd = dispatchCountdowns[d.id];
+          return h('div', { key:d.id, className:`dispatch-driver-card ${cd>0?'searching':''}` },
+            h('div',{style:{fontSize:20}},d.avatar),
+            h('div',{style:{flex:1}},
+              h('div',{style:{fontSize:12,fontWeight:600,color:'var(--white)'}},d.name),
+              h('div',{style:{fontSize:11,color:'var(--muted)'}},d.vehicle)
+            ),
+            h('div', { className:'dispatch-countdown' }, cd > 0 ? cd+'s' : '…'),
+            h('div', { style:{marginLeft:6} },
+              h('span', { className:'dispatch-status ds-waiting' }, 'Waiting')
+            )
+          );
+        })
+      ),
+
+      // Assigned driver
+      assignedDriver && h('div', { className:'card', style:{border:'1px solid var(--green)', background:'var(--green-dim)'} },
+        h('div', { className:'card-title', style:{color:'var(--green)'} }, '✅ Driver Assigned'),
+        h('div', { className:'driver-list-item' },
+          h('div',{className:'driver-avatar online',style:{fontSize:22}}, assignedDriver.avatar),
+          h('div',{className:'driver-info'},
+            h('div',{className:'driver-name'},assignedDriver.name),
+            h('div',{className:'driver-meta'},assignedDriver.vehicle+' · ⭐ '+assignedDriver.rating)
+          ),
+          h('div',{className:'driver-badge badge-online'},'En Route')
+        )
+      ),
+
+      // Timeline
+      dispatchEvents.length > 0 && h('div', { className:'card' },
+        h('div', { className:'card-title' }, 'Dispatch Timeline'),
+        h('div', { className:'timeline' },
+          dispatchEvents.map((evt,i) => h('div', { key:i, className:'timeline-event' },
+            h('div', { className:`timeline-dot ${evt.dot||'amber'}` }),
+            h('div', { className:'tl-content' },
+              h('div', { className:'tl-time' }, evt.ts),
+              h('div', { className:'tl-label' }, evt.label),
+              evt.sub && h('div', { className:'tl-sub' }, evt.sub)
+            )
+          ))
+        )
+      )
+    )
+  );
+}
+
+// ═══════════════════════════════════════════════
+// MAIN APP
+// ═══════════════════════════════════════════════
+
+function App() {
+  const [page, setPage] = useState('drivers');
+  const [drivers, setDrivers] = useState([]);
+  const [selectedDriver, setSelectedDriver] = useState(null);
+  const [pickup, setPickup] = useState(null);
+  const [dest, setDest] = useState(null);
+  const [mapClickMode, setMapClickMode] = useState(null); // null | 'pickup' | 'dest' | 'driver'
+  const [dispatchedDriverIds, setDispatchedDriverIds] = useState([]);
+  const [toasts, setToasts] = useState([]);
+  const [stats, setStats] = useState({ online:0, offline:0, totalRequests:0, completed:0, avgFare:0, redZones:0 });
+
+  const mapRef = useRef(null);
+  const mapInstance = useRef(null);
+  const markersRef = useRef({});
+  const pickupMarkerRef = useRef(null);
+  const destMarkerRef = useRef(null);
+  const routeLayerRef = useRef(false);
+  const mapClickModeRef = useRef(null);
+  const driversRef = useRef(drivers);
+
+  // Keep refs in sync
+  useEffect(() => { driversRef.current = drivers; mapClickModeRef.current = mapClickMode; }, [drivers, mapClickMode]);
+
+  // Update stats
+  useEffect(() => {
+    const on = drivers.filter(d=>d.online).length;
+    setStats(s=>({...s, online:on, offline:drivers.length-on}));
+  }, [drivers]);
+
+  function addToast(t) {
+    const id = toastIdCounter++;
+    setToasts(prev=>[...prev,{...t,id}]);
+    setTimeout(()=>setToasts(prev=>prev.filter(x=>x.id!==id)), 4000);
+  }
+
+  // ─── MAP INIT ───
+  useEffect(() => {
+    const map = new maplibregl.Map({
+      container: 'map',
+      style: {
+        version: 8,
+        sources: {
+          osm: {
+            type: 'raster',
+            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+            tileSize: 256,
+            attribution: '© OpenStreetMap contributors'
+          }
+        },
+        layers: [{
+          id: 'osm',
+          type: 'raster',
+          source: 'osm',
+          paint: {
+            'raster-brightness-min': 0,
+            'raster-brightness-max': 0.25,
+            'raster-saturation': -0.8,
+            'raster-contrast': 0.15,
+            'raster-hue-rotate': 200
+          }
+        }]
+      },
+      center: ISLAMABAD_CENTER,
+      zoom: 12,
+      attributionControl: false
+    });
+
+    map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
+
+    map.on('load', () => {
+      // Route source
+      map.addSource('route', {
+        type: 'geojson',
+        data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } }
+      });
+      map.addLayer({
+        id: 'route-glow',
+        type: 'line',
+        source: 'route',
+        paint: { 'line-color': '#F97316', 'line-width': 8, 'line-opacity': 0.2, 'line-blur': 4 }
+      });
+      map.addLayer({
+        id: 'route-line',
+        type: 'line',
+        source: 'route',
+        paint: { 'line-color': '#F97316', 'line-width': 3, 'line-opacity': 0.9, 'line-dasharray': [2,1] }
+      });
+
+      // Red zones source
+      map.addSource('redzones', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      });
+      map.addLayer({
+        id: 'redzones-fill',
+        type: 'circle',
+        source: 'redzones',
+        paint: {
+          'circle-radius': ['get','radius'],
+          'circle-color': '#EF4444',
+          'circle-opacity': 0.12,
+          'circle-stroke-width': 2,
+          'circle-stroke-color': '#EF4444',
+          'circle-stroke-opacity': 0.5
+        }
+      });
+
+      routeLayerRef.current = true;
+    });
+
+    map.on('click', (e) => {
+      const mode = mapClickModeRef.current;
+      const lngLat = [e.lngLat.lng, e.lngLat.lat];
+
+      if (mode === 'driver') {
+        const d = createDriver(lngLat);
+        setDrivers(prev=>[...prev,d]);
+        setSelectedDriver(d);
+        return;
+      }
+      if (mode === 'pickup') {
+        setPickup(lngLat);
+        setMapClickMode('dest');
+        return;
+      }
+      if (mode === 'dest') {
+        setDest(lngLat);
+        setMapClickMode(null);
+        return;
+      }
+      // Default: place driver
+      if (!mode) {
+        const d = createDriver(lngLat);
+        setDrivers(prev=>[...prev,d]);
+        setSelectedDriver(d);
+      }
+    });
+
+    mapInstance.current = map;
+    return () => map.remove();
+  }, []);
+
+  // ─── SYNC DRIVER MARKERS ───
+  useEffect(() => {
+    const map = mapInstance.current;
+    if (!map) return;
+
+    // Remove stale markers
+    Object.keys(markersRef.current).forEach(id => {
+      if (!drivers.find(d=>d.id===id)) {
+        markersRef.current[id].remove();
+        delete markersRef.current[id];
+      }
+    });
+
+    // Update/create markers
+    drivers.forEach(d => {
+      const isSelected = selectedDriver?.id === d.id;
+      const svg = markerForDriver(d, isSelected);
+      const el = document.createElement('div');
+      el.innerHTML = svg;
+      el.style.cursor = 'pointer';
+      el.style.width = '32px';
+      el.style.height = '32px';
+      el.title = d.name;
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setSelectedDriver(prev => prev?.id === d.id ? null : d);
+      });
+
+      if (markersRef.current[d.id]) {
+        markersRef.current[d.id].setLngLat(d.coords);
+        markersRef.current[d.id].getElement().innerHTML = svg;
+      } else {
+        const marker = new maplibregl.Marker({ element: el, anchor:'center' })
+          .setLngLat(d.coords)
+          .addTo(map);
+        markersRef.current[d.id] = marker;
+      }
+    });
+  }, [drivers, selectedDriver]);
+
+  // ─── SYNC PICKUP / DEST MARKERS ───
+  useEffect(() => {
+    const map = mapInstance.current;
+    if (!map) return;
+
+    if (pickup) {
+      const el = document.createElement('div');
+      el.innerHTML = pickupSVG();
+      el.style.width = '36px'; el.style.height = '44px'; el.style.cursor = 'default';
+      if (pickupMarkerRef.current) pickupMarkerRef.current.remove();
+      pickupMarkerRef.current = new maplibregl.Marker({ element: el, anchor:'bottom' })
+        .setLngLat(pickup).addTo(map);
+    } else {
+      if (pickupMarkerRef.current) { pickupMarkerRef.current.remove(); pickupMarkerRef.current = null; }
+    }
+
+    if (dest) {
+      const el = document.createElement('div');
+      el.innerHTML = destSVG();
+      el.style.width = '36px'; el.style.height = '44px'; el.style.cursor = 'default';
+      if (destMarkerRef.current) destMarkerRef.current.remove();
+      destMarkerRef.current = new maplibregl.Marker({ element: el, anchor:'bottom' })
+        .setLngLat(dest).addTo(map);
+    } else {
+      if (destMarkerRef.current) { destMarkerRef.current.remove(); destMarkerRef.current = null; }
+    }
+  }, [pickup, dest]);
+
+  // ─── DRAW ROUTE ───
+  useEffect(() => {
+    const map = mapInstance.current;
+    if (!map || !routeLayerRef.current) return;
+    if (pickup && dest) {
+      const coords = buildRoutePath(pickup, dest, 60);
+      map.getSource('route')?.setData({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: coords }
+      });
+    } else {
+      map.getSource('route')?.setData({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: [] }
+      });
+    }
+  }, [pickup, dest]);
+
+  // ─── CURSOR ───
+  useEffect(() => {
+    const map = mapInstance.current;
+    if (!map) return;
+    map.getCanvas().style.cursor = mapClickMode ? 'crosshair' : 'default';
+  }, [mapClickMode]);
+
+  const online = drivers.filter(d=>d.online).length;
+  const surge = getSurgeMultiplier(online, stats.totalRequests);
+  const dist = pickup && dest ? haversineKm(pickup, dest) : null;
+  const fare = dist ? calcFare(dist, surge) : null;
+
+  const hintText = mapClickMode === 'pickup' ? '📍 Click map to set Pickup'
+    : mapClickMode === 'dest' ? '🏁 Click map to set Destination'
+    : mapClickMode === 'driver' ? '🚗 Click map to place a Driver'
+    : '🗺️ Click map to add a driver';
+
+  return h('div', { className:'app-shell' },
+
+    // ─── TOPBAR ───
+    h('div', { className:'topbar' },
+      h('div', { className:'logo' },
+        h('div', { className:'logo-icon' }, '🛺'),
+        h('div', {},
+          h('div', { className:'logo-text' }, 'Sawari'),
+          h('div', { className:'logo-sub' }, 'Dispatch Simulator')
+        )
+      ),
+      h('div', { className:'nav-tabs' },
+        h('button', { className:`nav-tab ${page==='drivers'?'active':''}`, onClick:()=>setPage('drivers') },
+          '🚗 Drivers'
+        ),
+        h('button', { className:`nav-tab ${page==='ride'?'active':''}`, onClick:()=>setPage('ride') },
+          '🛣️ Ride Simulator'
+        )
+      ),
+      h('div', { className:'topbar-right' },
+        h('div', { className:'status-dot' }),
+        h('span', { className:'status-label' }, 'Live'),
+        h('span', { className:'version-badge' }, 'v1.0.0')
+      )
+    ),
+
+    // ─── STATS BAR ───
+    h('div', { className:'stats-bar' },
+      h('div',{className:'stat-item'},
+        h('div',{className:'stat-icon'},'🟢'),
+        h('div',{},
+          h('div',{className:'stat-label'},'Online'),
+          h('div',{className:'stat-value green'},online)
+        )
+      ),
+      h('div',{className:'stat-item'},
+        h('div',{className:'stat-icon'},'⭕'),
+        h('div',{},
+          h('div',{className:'stat-label'},'Offline'),
+          h('div',{className:'stat-value'},drivers.length - online)
+        )
+      ),
+      h('div',{className:'stat-item'},
+        h('div',{className:'stat-icon'},'📋'),
+        h('div',{},
+          h('div',{className:'stat-label'},'Requests'),
+          h('div',{className:'stat-value'},stats.totalRequests)
+        )
+      ),
+      h('div',{className:'stat-item'},
+        h('div',{className:'stat-icon'},'✅'),
+        h('div',{},
+          h('div',{className:'stat-label'},'Dispatched'),
+          h('div',{className:'stat-value green'},stats.completed)
+        )
+      ),
+      h('div',{className:'stat-item'},
+        h('div',{className:'stat-icon'},'⚡'),
+        h('div',{},
+          h('div',{className:'stat-label'},'Surge'),
+          h('div',{className:`stat-value ${surge>1.2?'red':surge>1?'amber':'green'}`},surge+'x')
+        )
+      ),
+      h('div',{className:'stat-item'},
+        h('div',{className:'stat-icon'},'💰'),
+        h('div',{},
+          h('div',{className:'stat-label'},'Est. Fare'),
+          h('div',{className:'stat-value amber'},fare?'Rs. '+fare.total:'—')
+        )
+      ),
+      h('div',{className:'stat-item'},
+        h('div',{className:'stat-icon'},'🚗'),
+        h('div',{},
+          h('div',{className:'stat-label'},'Total'),
+          h('div',{className:'stat-value'},drivers.length)
+        )
+      ),
+    ),
+
+    // ─── MAIN ───
+    h('div', { className:'main-area' },
+
+      // Map
+      h('div', { className:'map-container' },
+        h('div', { id:'map' }),
+
+        // Overlay controls
+        h('div', { className:'map-overlay-controls' },
+          h('button', {
+            className:`map-action-btn ${mapClickMode==='driver'?'active':''}`,
+            onClick:()=>setMapClickMode(m=>m==='driver'?null:'driver')
+          }, '+ Add Driver'),
+          page === 'ride' && h('button', {
+            className:`map-action-btn ${mapClickMode==='pickup'?'active':''}`,
+            onClick:()=>setMapClickMode(m=>m==='pickup'?null:'pickup')
+          }, '📍 Set Pickup'),
+          page === 'ride' && pickup && h('button', {
+            className:`map-action-btn ${mapClickMode==='dest'?'active':''}`,
+            onClick:()=>setMapClickMode(m=>m==='dest'?null:'dest')
+          }, '🏁 Set Destination'),
+        ),
+
+        h('div', { className:'map-hint' },
+          h('div', { className:'map-hint-dot' }),
+          hintText
+        )
+      ),
+
+      // Right Panel
+      h('div', { className:'right-panel' },
+        page === 'drivers'
+          ? h(DriverManagementPage, {
+              drivers, setDrivers, selectedDriver, setSelectedDriver,
+              map: mapInstance.current,
+              dispatch: null,
+              dispatchedDriverIds,
+              ridePickup: pickup
+            })
+          : h(RideSimulatorPage, {
+              drivers, setDrivers, pickup, setPickup, dest, setDest,
+              mapClickMode, setMapClickMode, addToast, stats, setStats
+            })
+      )
+    ),
+
+    // Toasts
+    h(ToastContainer, { toasts, dismiss: id=>setToasts(prev=>prev.filter(t=>t.id!==id)) })
+  );
+}
+
+// ─── BOOT ───
+ReactDOM.createRoot(document.getElementById('root')).render(h(App));
+</script>
+</body>
+</html>

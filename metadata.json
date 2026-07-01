@@ -1,0 +1,6 @@
+{
+  "name": "Sawari Dispatch Simulator",
+  "description": "A high-fidelity dispatch simulation and analytics dashboard for the Sawari ride-booking platform, featuring real-time multi-mode execution (Customer, Driver, Admin) and interactive MapLibre-driven logistics.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
